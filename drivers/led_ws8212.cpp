@@ -23,7 +23,6 @@ inline void __attribute__ ((always_inline)) Wait(uint32_t delay)
     waitUntil += delay;
     do {
         GET_CYCLE_COUNT(cycleCount);
-        __asm__ __volatile__("rsr     %0, ccount":"=a" (cycleCount));
     } while(waitUntil > cycleCount);
 }
 
