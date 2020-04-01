@@ -1,114 +1,108 @@
 #include "espp/log.h"
 
 #include "driver/uart.h"
-#include "freertos/task.h"
 
 #include "espp/lts.h"
+
+#include "esp_libc.h"
 
 namespace espp {
 
 namespace {
-const uart_port_t logPort = static_cast<uart_port_t>(CONFIG_CONSOLE_UART_NUM);
+const UBaseType_t _buffer_size = 32;
+char _buffer[_buffer_size] = {
+    ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ',
+    ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ',
+    ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ',
+    ' ', ' '
+};
+char* _last_buffer_char = _buffer + _buffer_size - 1;
 
-const char SPACE = ' ';
-const char NEW_LINE = '\n';
 const char ZERO_STR[] = "0 ";
+const char HEX_PREFIX[] = "0x";
+
+inline
+void _OutChar(int ch)
+{
+    ets_putc(ch);
 }
 
-const char LogLine::HEX_PREFIX[] = "0x";
-
-void Log::Init()
+inline
+void _OutBuffer(const char *buffer, std::size_t size)
 {
-    static bool is_uart_inited = false;
-    if(!is_uart_inited) {
-        uart_config_t uart_config = {
-            .baud_rate = 74880,
-            .data_bits = UART_DATA_8_BITS,
-            .parity    = UART_PARITY_DISABLE,
-            .stop_bits = UART_STOP_BITS_1,
-            .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
-            .rx_flow_ctrl_thresh = 0,
-            };
-        uart_param_config(logPort, &uart_config);
-        uart_driver_install(logPort, 1024 * 2, 0, 0, nullptr, 0);
-        is_uart_inited = true;
+    for(const auto until_ptr = buffer + size; buffer != until_ptr; ++buffer) {
+        _OutChar(*buffer);
     }
 }
 
-void Log::LogBuffer(const char *buffer, std::size_t size)
-{
-     uart_write_bytes(logPort, buffer, size);
-}
-
-void Log::PutSplitter()
-{
-    LogBuffer(&SPACE, 1);
-}
-
-void Log::PutEndOfLine()
-{
-    LogBuffer(&NEW_LINE, 1);
-}
-
-Log& Log::get_instance()
-{
-    return *reinterpret_cast<Log*>(pvTaskGetThreadLocalStoragePointer(nullptr, 0));
-}
-
-Log::Log(): _last_buffer_char(_buffer + _buffer_size - 1)
-{
-    *_last_buffer_char = ' ';
-}
-
-Log::~Log()
-{
-    if(&get_instance() == this) {
-        vTaskSetThreadLocalStoragePointer(nullptr, static_cast<BaseType_t>(LTS::LOG), nullptr);
-    }
-}
-
-void Log::Attach()
-{
-    vTaskSetThreadLocalStoragePointer(nullptr, static_cast<BaseType_t>(LTS::LOG), this);
-}
-
-void Log::PutInt(int src)
+inline
+void _OutUInt(unsigned int src)
 {
     if(src == 0) {
-        LogBuffer(ZERO_STR, 2);
+        _OutBuffer(ZERO_STR, 2);
         return;
     }
-    bool sign_flag = false;
+    char* current_character = _last_buffer_char;
+    while(src != 0) {
+        current_character -= 1;
+        *current_character = static_cast<char>('0' + src % 10);
+        src /= 10;
+    }
+    _OutBuffer(current_character, _last_buffer_char - current_character + 1);
+}
+
+inline
+void _OutInt(int src)
+{
     if(src < 0) {
-        sign_flag = true;
+        _OutChar('-');
         src = -src;
     }
-    char* current_character = _last_buffer_char;
-    while(src != 0) {
-        current_character -= 1;
-        *current_character = static_cast<char>('0' + src % 10);
-        src /= 10;
-    }
-    if(sign_flag) {
-        current_character -= 1;
-        *current_character = '-';
-    }
-    LogBuffer(current_character, _last_buffer_char - current_character + 1);
+    _OutUInt(src);
 }
 
-void Log::PutUInt(unsigned int src)
+}
+
+void Log::_OutChar(int ch)
 {
-    if(src == 0) {
-        LogBuffer(ZERO_STR, 2);
-        return;
+    ::espp::_OutChar(ch);
+}
+
+
+const Log& Log::operator<<(char obj) const
+{
+    _OutChar(obj);
+    _OutChar(' ');
+    return *this;
+}
+
+const Log& Log::operator<<(const char* obj) const
+{
+    for(;*obj != 0; ++obj) {
+        _OutChar(*obj);
     }
-    char* current_character = _last_buffer_char;
-    while(src != 0) {
-        current_character -= 1;
-        *current_character = static_cast<char>('0' + src % 10);
-        src /= 10;
-    }
-    LogBuffer(current_character, _last_buffer_char - current_character + 1);
+    _OutChar(' ');
+    return *this;
+}
+
+const Log& Log::operator<<(int obj) const
+{
+    _OutInt(obj);
+    return *this;
+}
+
+const Log& Log::operator<<(unsigned int obj) const
+{
+    _OutUInt(obj);
+    return *this;
+}
+
+const Log& Log::operator<<(const void* obj) const
+{
+    _OutBuffer(HEX_PREFIX, 2);
+    const auto value = reinterpret_cast<uintptr_t>(obj);
+    _OutUInt(value);
+    return *this;
 }
 
 }

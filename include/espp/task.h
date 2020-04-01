@@ -14,7 +14,6 @@ class Task{
 protected:
     TaskHandle_t _handle;
     UBaseType_t _priority;
-    Log log;
 
 public:
     explicit
@@ -47,7 +46,6 @@ public:
 
     void init_run()
     {
-        log.Attach();
     }
 
     void Delay(UBaseType_t delayMs)

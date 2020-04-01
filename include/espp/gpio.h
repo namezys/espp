@@ -16,7 +16,7 @@ struct GpioState{
     char level;         ///< H in case of high level or L in case of low
 };
 
-inline const LogLine& operator<<(const LogLine& log, const GpioState& state)
+inline const Log& operator<<(const Log& log, const GpioState& state)
 {
     return log << "gpio" << state.pin << "level" << state.level;
 }
