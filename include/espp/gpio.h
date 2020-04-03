@@ -2,8 +2,9 @@
 
 #include "freertos/FreeRTOS.h"
 
-#include "driver/gpio.h"
 #include "esp8266/gpio_struct.h"
+#include "driver/gpio.h"
+
 #include "espp/log.h"
 
 namespace espp {

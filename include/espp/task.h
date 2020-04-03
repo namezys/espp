@@ -1,16 +1,29 @@
 #pragma once
 
 #include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 #include <type_traits>
 
-#include "freertos/task.h"
 #include "espp/log.h"
 #include "espp/lts.h"
 
 namespace espp {
 
-class Task{
+class TaskBase {
+public:
+    void Delay(UBaseType_t delayTicks)
+    {
+        vTaskDelay(delayTicks);
+    }
+
+    void DelayMs(UBaseType_t delayMs)
+    {
+        Delay(pdMS_TO_TICKS(delayMs));
+    }
+};
+
+class Task: public TaskBase {
 protected:
     TaskHandle_t _handle;
     UBaseType_t _priority;
@@ -48,10 +61,6 @@ public:
     {
     }
 
-    void Delay(UBaseType_t delayMs)
-    {
-        vTaskDelay(pdMS_TO_TICKS(delayMs));
-    }
 
     template<class InstTask>
     static void _task_function(void* pTask)

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "freertos/FreeRTOS.h"
+
 #include "esp8266/eagle_soc.h"
 
 #define PROFILE(statement) {                                   \

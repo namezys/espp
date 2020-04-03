@@ -1,9 +1,6 @@
 #include "espp/log.h"
 
 #include "driver/uart.h"
-
-#include "espp/lts.h"
-
 #include "esp_libc.h"
 
 namespace espp {

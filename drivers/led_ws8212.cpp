@@ -1,7 +1,6 @@
 #include "espp/drivers/led_ws8212.h"
 #include "espp/utils/low_level.h"
 
-#include "freertos/task.h"
 
 namespace espp {
 
