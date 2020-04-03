@@ -5,3 +5,7 @@
 #include "espp/log.h"
 #include "espp/task.h"
 #include "espp/gpio.h"
+#include "espp/mutex.h"
+#include "espp/critical_section.h"
+
+#include "espp/wifi.h"
