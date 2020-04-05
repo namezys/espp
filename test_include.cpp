@@ -9,3 +9,5 @@
 #include "espp/critical_section.h"
 
 #include "espp/wifi.h"
+#include "espp/mqtt.h"
+#include "espp/protobuf.h"
