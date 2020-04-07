@@ -28,6 +28,15 @@ struct LedColor{
     {
         return std::max(std::min(c, 0xFF), 0);
     }
+
+    template<class T>
+    LedColor& operator=(const T& other)
+    {
+        green = other.green;
+        red = other.red;
+        blue = other.blue;
+        return *this;
+    }
 };
 
 inline
@@ -65,22 +74,6 @@ LedColor operator-(const LedColor& color, int32_t c)
 
 template<std::size_t length>
 class LedStrip{
-private:
-    const static std::size_t _bufferSize = (3 * length + 3) / 4;
-    GpioPin _gpio_pin;
-    std::array<uint32_t, _bufferSize> _buffer;
-    uint8_t* const _colors;
-
-    uint32_t* ledBuffer()
-    {
-        return _buffer.data();
-    }
-
-    UBaseType_t ledBufferSize()
-    {
-        return _bufferSize;
-    }
-
 public:
     explicit
     LedStrip(GpioPin& pin): _gpio_pin(pin), _buffer(), _colors(reinterpret_cast<uint8_t*>(_buffer.data()))
@@ -114,6 +107,24 @@ public:
     {
         SendLed(_gpio_pin.mask(), ledBuffer(), ledBufferSize());
     }
+
+
+private:
+    const static std::size_t _bufferSize = (3 * length + 3) / 4;
+    GpioPin _gpio_pin;
+    std::array<uint32_t, _bufferSize> _buffer;
+    uint8_t* const _colors;
+
+    uint32_t* ledBuffer()
+    {
+        return _buffer.data();
+    }
+
+    UBaseType_t ledBufferSize()
+    {
+        return _bufferSize;
+    }
+
 };
 
 #ifdef ENABLE_TEST
