@@ -91,6 +91,7 @@ bool Mqtt::Disconnect()
 
 void Mqtt::OnConnect(int)
 {
+    OnStatusUpdateTimer();
 }
 
 void Mqtt::OnDisconnect()

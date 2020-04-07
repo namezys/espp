@@ -18,6 +18,8 @@ using MqttMsg = std::vector<uint8_t>;
 
 class MqttSubscription {
 public:
+    using Msg = MqttMsg;
+
     virtual void OnEvent(esp_mqtt_event_handle_t event)
     {
         if (event->data_len > 0) {
@@ -30,6 +32,8 @@ public:
 
 class Mqtt {
 public:
+    using Msg = MqttMsg;
+
     explicit
     Mqtt(std::string  url, std::string status_topic = {});
     virtual ~Mqtt();
