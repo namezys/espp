@@ -47,7 +47,10 @@ public:
 
 }
 
-#define LOG(level) espp::Log() << #level << __FILE__ << __LINE__
+#define LOG_ENABLED true
+
+#define ROW_LOG espp::Log()
+#define LOG(level) if(LOG_ENABLED) ROW_LOG << #level << __FILE__ << __LINE__
 #define DEBUG LOG(DEBUG)
 #define INFO LOG(INFO)
 #define ERROR LOG(ERROR)
