@@ -43,10 +43,10 @@ protected:
         return _is_scan || _is_station;
     }
 
-    virtual void OnReady() {}
-    virtual void OnScanDone() {}
-    virtual void OnConnected() {}
-    virtual void OnDisconnected() {}
+    virtual void OnReady();
+    virtual void OnScanDone();
+    virtual void OnConnected();
+    virtual void OnDisconnected();
 
 private:
     bool _is_inited = false;

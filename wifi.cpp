@@ -11,21 +11,13 @@ namespace espp {
 
 namespace {
 
-bool _SetWiFiSingleton(void* ptr)
+bool _SetWiFiSingleton(bool init)
 {
-    static void* current = nullptr;
-    CriticalSection critical;
-    if(ptr == nullptr) {
-        assert(current != nullptr);
-        current = nullptr;
-        return true;
-    }
-
-    if(current != nullptr) {
+    static bool is_inited = false;
+    if (init == is_inited) {
         return false;
     }
-
-    current = ptr;
+    is_inited = init;
     return true;
 }
 
@@ -37,7 +29,7 @@ WiFi::~WiFi()
     if(isInited()) {
         INFO << "DeInit WiFi";
         ESP_ERROR_CHECK(esp_wifi_deinit());
-        ESPP_CHECK(_SetWiFiSingleton(nullptr));
+        ESPP_CHECK(_SetWiFiSingleton(false));
         ESPP_CHECK(_EventHandler == esp_event_loop_set_cb(nullptr, nullptr));
     }
 }
@@ -53,7 +45,7 @@ void WiFi::_Init()
     INFO << "Init WiFi system";
     Mutex::LockGuard lock(_mutex);
     assert(!isInited());
-    ESPP_CHECK(_SetWiFiSingleton(this));
+    ESPP_CHECK(_SetWiFiSingleton(true));
     const auto init_loop_result = esp_event_loop_init(_EventHandler, this);
     if(init_loop_result == ESP_FAIL) {
         DEBUG << "Loop was inited early. Set event handler";
@@ -166,6 +158,25 @@ bool WiFi::Disconnect()
     _is_station = false;
     return true;
 }
+
+void WiFi::OnReady()
+{
+}
+
+void WiFi::OnScanDone()
+{
+    StopScan();
+}
+
+void WiFi::OnConnected()
+{
+}
+
+void WiFi::OnDisconnected()
+{
+    Disconnect();
+}
+
 
 esp_err_t WiFi::_EventHandler(void* ctx, system_event_t* event)
 {
