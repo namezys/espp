@@ -11,6 +11,7 @@
 #define LOG_ENABLED true
 #define LOG_TASK true
 #define LOG_TIME true
+#define LOG_VERBOSE false
 
 namespace espp {
 
@@ -82,7 +83,7 @@ public:
 
 #define ROW_LOG espp::Log()
 #define LOG(level) if(LOG_ENABLED) ROW_LOG << #level << __FILE__ << __LINE__
-#define VERBOSE if (false) ROW_LOG
+#define VERBOSE if (LOG_VERBOSE) ROW_LOG
 #define DEBUG LOG(DEBUG)
 #define INFO LOG(INFO)
 #define ERROR LOG(ERROR)
