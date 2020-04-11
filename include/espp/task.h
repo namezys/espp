@@ -12,11 +12,13 @@ namespace espp {
 
 class TaskBase {
 public:
+    static
     void Delay(UBaseType_t delayTicks)
     {
         vTaskDelay(delayTicks);
     }
 
+    static
     void DelayMs(UBaseType_t delayMs)
     {
         Delay(pdMS_TO_TICKS(delayMs));
@@ -24,15 +26,20 @@ public:
 };
 
 class Task: public TaskBase {
-protected:
-    TaskHandle_t _handle;
-    UBaseType_t _priority;
-
 public:
     explicit
     Task(UBaseType_t priority = 0):
         _handle(),
         _priority(priority)
+    {
+        vTaskSetThreadLocalStoragePointer(nullptr, static_cast<BaseType_t>(LTS::TASK), this);
+    }
+
+    explicit
+    Task(const char* name):
+        _handle(),
+        _priority(0),
+        _name(name)
     {
         vTaskSetThreadLocalStoragePointer(nullptr, static_cast<BaseType_t>(LTS::TASK), this);
     }
@@ -54,7 +61,7 @@ public:
 
     const char* name()
     {
-        return "";
+        return _name;
     }
 
     void init_run()
@@ -72,13 +79,21 @@ public:
     }
 
     template<class InstTask>
-    static void start(InstTask& task)
+    static void Start(InstTask& task)
     {
         static_assert(std::is_base_of<Task, InstTask>::value, "expect Task");
         auto run_func = Task::_task_function<InstTask>;
         auto param = reinterpret_cast<void*>(&task);
         xTaskCreate(run_func, task.name(), task.stack_depth(), param, task.priority(), &task.handle());
     }
+
+
+protected:
+    TaskHandle_t _handle;
+    UBaseType_t _priority;
+
+private:
+    const char* _name = nullptr;
 };
 
 }
