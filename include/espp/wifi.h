@@ -25,10 +25,31 @@ public:
     ScanResult scanResult();
     bool StopScan();
 
-    void Connect(const std::string& ssid, const std::string& password);
-    bool Disconnect();
+    bool isScan() const
+    {
+        return _is_scan;
+    }
+
+    bool isScanDone() const
+    {
+        return _is_scan_done;
+    }
+
+    void ConnectStation(const std::string& ssid, const std::string& password);
+    bool DisconnectStation();
+
+    bool isStationStarted() const
+    {
+        return _is_station_started;
+    }
+
+    bool isStationConnected() const
+    {
+        return _is_station_connected;
+    }
 
 protected:
+    using Mutex = espp::Mutex<>;
     Mutex _mutex;
     wifi_init_config_t _config = WIFI_INIT_CONFIG_DEFAULT();
     std::vector<wifi_ap_record_t> _scan_result;
@@ -40,7 +61,7 @@ protected:
 
     bool isOccupied() const
     {
-        return _is_scan || _is_station;
+        return _is_scan || _is_station_started;
     }
 
     virtual void OnReady();
@@ -51,7 +72,9 @@ protected:
 private:
     bool _is_inited = false;
     bool _is_scan = false;
-    bool _is_station = false;
+    bool _is_scan_done = false;
+    bool _is_station_started = false;
+    bool _is_station_connected = false;
 
     void _Init();
 
@@ -59,6 +82,8 @@ private:
     void _ProcessEvent(system_event_t& event);
 
     void _StationStarted();
+    void _StationConnected();
+    void _StationDisconnected();
     void _StationStopped();
 };
 
