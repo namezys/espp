@@ -8,10 +8,8 @@
 
 #include "espp/lts.h"
 
-#define LOG_ENABLED true
 #define LOG_TASK true
 #define LOG_TIME true
-#define LOG_VERBOSE false
 
 namespace espp {
 
@@ -80,10 +78,16 @@ public:
 
 }
 
+#define LOG_INFO_ENABLED true
+#define LOG_ERROR_ENABLED true
+#define LOG_DEBUG_ENABLED true
+#define LOG_VERBOSE_ENABLED false
 
 #define ROW_LOG espp::Log()
-#define LOG(level) if(LOG_ENABLED) ROW_LOG << #level << __FILE__ << __LINE__
-#define VERBOSE if (LOG_VERBOSE) ROW_LOG
-#define DEBUG LOG(DEBUG)
-#define INFO LOG(INFO)
-#define ERROR LOG(ERROR)
+//#define LOG(level) if(LOG_ENABLED) ROW_LOG << #level << __FILE__ << __LINE__
+#define LOG(level) ROW_LOG << #level
+
+#define ERROR if(LOG_ERROR_ENABLED || LOG_INFO_ENABLED || LOG_DEBUG_ENABLED || LOG_VERBOSE_ENABLED) LOG(ERROR)
+#define INFO if(LOG_INFO_ENABLED || LOG_DEBUG_ENABLED || LOG_VERBOSE_ENABLED) LOG(INFO)
+#define DEBUG if(LOG_DEBUG_ENABLED || LOG_VERBOSE_ENABLED) LOG(DEBUG)
+#define VERBOSE if(LOG_VERBOSE_ENABLED) LOG(VERBOSE)
