@@ -34,9 +34,6 @@ Mqtt::~Mqtt()
     if (_client != nullptr) {
         ESP_ERROR_CHECK(esp_mqtt_client_destroy(_client));
     }
-    if (_update_status_timer != nullptr) {
-        ESPP_CHECK(pdPASS == xTimerDelete(_update_status_timer, portMAX_DELAY));
-    }
 }
 
 void Mqtt::Init(const MqttMsg& status_msg)
@@ -54,53 +51,43 @@ void Mqtt::Init(const MqttMsg& status_msg)
         mqtt_cfg.lwt_qos = 0;
         mqtt_cfg.lwt_retain = 1;
         mqtt_cfg.keepalive = _keep_alive_timeout;
-
-        DEBUG << "Init update status timer";
-        _update_status_timer = xTimerCreate(nullptr, _update_status_interval, pdTRUE,
-                                            this, _UpdateStatusEventHandler);
-        assert(_update_status_timer != nullptr);
     }
 
     _client = esp_mqtt_client_init(&mqtt_cfg);
     ESPP_CHECK(_client != nullptr);
 }
 
-void Mqtt::Connect()
+bool Mqtt::Connect()
 {
     INFO << "Connect Mqtt";
-    espp::Mutex::LockGuard lock(_mutex);
-    assert(!_is_connection);
-    ESP_ERROR_CHECK(esp_mqtt_client_start(_client));
-    _is_connection = true;
+    Mutex::LockGuard lock(_mutex);
+    ESPP_ASSERT(_client != nullptr);
+
+    const auto result = ESP_OK == esp_mqtt_client_start(_client);
+    DEBUG << "Connection finished" << result;
+    return result;
 }
 
 bool Mqtt::Disconnect()
 {
     INFO << "Disconnect Mqtt";
-    espp::Mutex::LockGuard lock(_mutex);
-    if (!_is_connection) {
-        DEBUG << "No connection";
-        return false;
-    }
-    if (ESP_OK != esp_mqtt_client_stop(_client)) {
-        DEBUG << "Can't stop because mqtt was stopped";
-    }
-    _is_connection = false;
-    return true;
+    Mutex::LockGuard lock(_mutex);
+    const auto result = ESP_OK == esp_mqtt_client_stop(_client);
+    DEBUG << "Disconnection finished" << result;
+    return result;
 }
 
 void Mqtt::OnConnect(int)
 {
-    OnStatusUpdateTimer();
 }
 
 void Mqtt::OnDisconnect()
 {
-    Disconnect();
 }
 
 void Mqtt::OnEvent(const esp_mqtt_event_handle_t& event)
 {
+    Mutex::LockGuard lock(_mutex);
     const std::string topic(event->topic, event->topic_len);
     DEBUG << "Got message in topic" << topic;
     const auto it = _subscriptions.find(topic);
@@ -117,12 +104,6 @@ esp_err_t Mqtt::_EventHandler(esp_mqtt_event_handle_t event)
     Mqtt* impl = reinterpret_cast<Mqtt*>(event->user_context);
     impl->_ProcessEvent(event);
     return ESP_OK;
-}
-
-void Mqtt::_UpdateStatusEventHandler(TimerHandle_t xTimer)
-{
-    Mqtt* impl = reinterpret_cast<Mqtt*>(pvTimerGetTimerID(xTimer));
-    impl->OnStatusUpdateTimer();
 }
 
 void Mqtt::_ProcessEvent(esp_mqtt_event_handle_t event)
@@ -146,25 +127,21 @@ void Mqtt::_ProcessEvent(esp_mqtt_event_handle_t event)
 
 void Mqtt::_ProcessConnect(int session_present)
 {
-    DEBUG << "Process connection. Subscribe all subscription";
-    espp::Mutex::LockGuard lock(_mutex);
+    INFO << "Mqtt connected";
+
+    Mutex::LockGuard lock(_mutex);
     for(auto& subscription: _subscriptions) {
         ESPP_CHECK(esp_mqtt_client_subscribe(_client, subscription.first.c_str(), 0) != -1);
     }
-    if (_update_status_timer != nullptr) {
-        DEBUG << "Start update status timer";
-        ESPP_CHECK(pdPASS == xTimerStart(_update_status_timer, portMAX_DELAY));
-    }
+    _is_connected = true;
+    DEBUG << "Connection finished";
 }
 
 void Mqtt::_ProcessDisconnect()
 {
-    DEBUG << "Process disconnect";
-    espp::Mutex::LockGuard lock(_mutex);
-    if (_update_status_timer != nullptr) {
-        DEBUG << "Stop update status timer";
-        ESPP_CHECK(pdPASS == xTimerStop(_update_status_timer, portMAX_DELAY));
-    }
+    INFO << "Mqtt disconnected";
+    Mutex::LockGuard lock(_mutex);
+    _is_connected = false;
 }
 
 }
