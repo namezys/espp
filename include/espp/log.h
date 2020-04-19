@@ -78,10 +78,21 @@ public:
 
 }
 
+#ifndef LOG_INFO_ENABLED
 #define LOG_INFO_ENABLED true
+#endif
+
+#ifndef LOG_ERROR_ENABLED
 #define LOG_ERROR_ENABLED true
-#define LOG_DEBUG_ENABLED true
+#endif
+
+#ifndef LOG_DEBUG_ENABLED
+#define LOG_DEBUG_ENABLED false
+#endif
+
+#ifndef LOG_VERBOSE_ENABLED
 #define LOG_VERBOSE_ENABLED false
+#endif
 
 #define ROW_LOG espp::Log()
 //#define LOG(level) if(LOG_ENABLED) ROW_LOG << #level << __FILE__ << __LINE__
