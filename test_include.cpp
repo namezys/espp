@@ -11,3 +11,5 @@
 #include "espp/wifi.h"
 #include "espp/mqtt.h"
 #include "espp/protobuf.h"
+
+#include "espp/utils/macros.h"
