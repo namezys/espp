@@ -61,6 +61,9 @@ public:
 
     const char* name()
     {
+        if (_name == nullptr) {
+            return "";
+        }
         return _name;
     }
 
