@@ -20,13 +20,9 @@ public:
     void Save();
 
 protected:
-    virtual void DoLoad()
-    {
-    }
+    virtual void DoLoad();
 
-    virtual void DoSave()
-    {
-    }
+    virtual void DoSave();
 
     std::string ReadStr(const char* name)
     {
@@ -42,9 +38,12 @@ protected:
         return {result.data(), result.data() + length};
     }
 
-    void WriteStr(const char* name, const std::string& str)
+    void WriteStr(const char* name, const std::string& str, bool& changed)
     {
-        ESP_ERROR_CHECK(nvs_set_str(_nvs, name, str.c_str()));
+        if (changed) {
+            ESP_ERROR_CHECK(nvs_set_str(_nvs, name, str.c_str()));
+            changed = false;
+        }
     }
 
 private:
