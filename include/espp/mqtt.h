@@ -13,76 +13,35 @@
 #include <vector>
 #include <map>
 
+#include <espp/buffer.h>
+
 namespace espp {
 
-class MqttMsg: public std::vector<uint8_t> {
+class MqttSubscription{
 public:
-    MqttMsg():
-        std::vector<uint8_t>()
-    {}
-
-    MqttMsg(const char* begin, const char* end):
-        std::vector<uint8_t>(begin, end)
-    {}
-
-    MqttMsg(const char* str, std::size_t length):
-        std::vector<uint8_t>(str, str + length)
-    {}
-
-    MqttMsg(const char* str):
-        std::vector<uint8_t>(str, str + std::strlen(str))
-    {}
-
-    MqttMsg(const std::vector<uint8_t>& other):
-        std::vector<uint8_t>(other)
-    {}
-
-    MqttMsg(std::vector<uint8_t>&& other):
-        std::vector<uint8_t>(other)
-    {}
-
-    MqttMsg(const MqttMsg& other) = default;
-    MqttMsg(MqttMsg&& other) = default;
-
-    operator std::string() const
-    {
-        return {begin(), end()};
-    }
-
-    MqttMsg& operator=(const MqttMsg&) = default;
-
-    MqttMsg& operator=(const char* str)
-    {
-        *this = MqttMsg(str);
-        return *this;
-    }
-};
-
-class MqttSubscription {
-public:
-    using Msg = MqttMsg;
-
     virtual void OnEvent(esp_mqtt_event_handle_t event)
     {
-        if (event->data_len > 0) {
-            MqttMsg msg(event->data, event->data + event->data_len);
-            OnEventData(msg);
+        if(event->data_len > 0) {
+            OnEventData({event->data, static_cast<size_t>(event->data_len)});
         }
     }
-    virtual void OnEventData(const MqttMsg& msg) = 0;
+
+    virtual void OnEventData(const Buffer& msg) = 0;
 };
 
-class Mqtt: public TaskBase {
+class Mqtt: public TaskBase{
 public:
     using Mutex = espp::Mutex<>;
-    using Msg = MqttMsg;
 
     explicit
-    Mqtt(std::string  url, std::string status_topic = {});
+    Mqtt(std::string url, std::string status_topic = {});
+
     virtual ~Mqtt();
 
-    void Init(const MqttMsg& status_msg = {});
+    void Init(const Buffer& status_msg);
+
     bool Connect();
+
     bool Disconnect();
 
     bool isConnected() const
@@ -98,12 +57,12 @@ public:
         return ESP_OK == esp_mqtt_client_publish(_client, topic, data, data_len, 0, retain ? 1 : 0);
     }
 
-    bool Publish(const std::string& topic, const MqttMsg& data, bool retain = false)
+    bool Publish(const StringBuffer& topic, const Buffer& data, bool retain = false)
     {
-        return Publish(topic.data(), reinterpret_cast<const char*>(data.data()), data.size(), retain);
+        return Publish(topic.charData(), data.charData(), data.length(), retain);
     }
 
-    void UpdateStatus(const MqttMsg& msg)
+    void UpdateStatus(const Buffer& msg)
     {
         ESPP_ASSERT(!_status_topic.empty());
         Publish(_status_topic, msg, true);
@@ -117,7 +76,9 @@ public:
 
 protected:
     virtual void OnConnect(int session_present);
+
     virtual void OnDisconnect();
+
     virtual void OnEvent(const esp_mqtt_event_handle_t& event);
 
 private:
@@ -134,7 +95,9 @@ private:
     esp_err_t _EventHandler(esp_mqtt_event_handle_t event);
 
     void _ProcessEvent(esp_mqtt_event_handle_t event);
+
     void _ProcessConnect(int session_present);
+
     void _ProcessDisconnect();
 };
 

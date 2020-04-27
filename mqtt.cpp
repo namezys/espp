@@ -13,7 +13,7 @@ namespace {
 bool _SetMqttSingleton(bool init)
 {
     static bool is_inited = false;
-    if (init == is_inited) {
+    if(init == is_inited) {
         return false;
     }
     is_inited = init;
@@ -23,7 +23,8 @@ bool _SetMqttSingleton(bool init)
 }
 
 Mqtt::Mqtt(std::string url, std::string status_topic):
-    _url(std::move(url)), _status_topic(std::move(status_topic))
+    _url(std::move(url)),
+    _status_topic(std::move(status_topic))
 {
     ESPP_CHECK(_SetMqttSingleton(true));
 }
@@ -31,22 +32,22 @@ Mqtt::Mqtt(std::string url, std::string status_topic):
 Mqtt::~Mqtt()
 {
     ESPP_CHECK(_SetMqttSingleton(false));
-    if (_client != nullptr) {
+    if(_client != nullptr) {
         ESP_ERROR_CHECK(esp_mqtt_client_destroy(_client));
     }
 }
 
-void Mqtt::Init(const MqttMsg& status_msg)
+void Mqtt::Init(const Buffer& status_msg)
 {
     esp_mqtt_client_config_t mqtt_cfg = {};
     mqtt_cfg.uri = _url.data();
     mqtt_cfg.event_handle = _EventHandler;
     mqtt_cfg.user_context = this;
-    if (!_status_topic.empty()) {
+    if(!_status_topic.empty()) {
         DEBUG << "Init Mqtt LWT";
         assert(!status_msg.empty());
-        mqtt_cfg.lwt_msg = reinterpret_cast<const char*>(status_msg.data());
-        mqtt_cfg.lwt_msg_len = status_msg.size();
+        mqtt_cfg.lwt_msg = status_msg.charData();
+        mqtt_cfg.lwt_msg_len = status_msg.length();
         mqtt_cfg.lwt_topic = _status_topic.c_str();
         mqtt_cfg.lwt_qos = 0;
         mqtt_cfg.lwt_retain = 1;
@@ -91,7 +92,7 @@ void Mqtt::OnEvent(const esp_mqtt_event_handle_t& event)
     const std::string topic(event->topic, event->topic_len);
     DEBUG << "Got message in topic" << topic;
     const auto it = _subscriptions.find(topic);
-    if (it != _subscriptions.end()) {
+    if(it != _subscriptions.end()) {
         DEBUG << "Found subscription";
         it->second->OnEvent(event);
     } else {
@@ -120,12 +121,11 @@ void Mqtt::_ProcessEvent(esp_mqtt_event_handle_t event)
         case MQTT_EVENT_DATA:
             OnEvent(event);
             break;
-        default:
-            ;
+        default:;
     }
 }
 
-void Mqtt::_ProcessConnect(int session_present)
+void Mqtt::_ProcessConnect(int)
 {
     INFO << "Mqtt connected";
 
