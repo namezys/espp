@@ -6,7 +6,8 @@
 #include <string>
 #include <cstring>
 
-#include "espp/lts.h"
+#include <espp/lts.h>
+#include <espp/buffer.h>
 
 #define LOG_TASK true
 #define LOG_TIME true
@@ -60,7 +61,6 @@ public:
         return *this << static_cast<unsigned int>(obj);
     }
 
-    const Log& operator<<(const char* obj) const;
     const Log& operator<<(int obj) const;
     const Log& operator<<(unsigned int obj) const;
     const Log& operator<<(const void* obj) const;
@@ -70,9 +70,12 @@ public:
         return *this << reinterpret_cast<const char*>(obj);
     }
 
+    const Log& operator<<(const Buffer& buffer) const;
+    const Log& operator<<(const char* obj) const;
+    const Log& operator<<(bool is) const;
     const Log& operator<<(const std::string& obj) const
     {
-        return *this << obj.data();
+        return *this << Buffer(obj);
     }
 };
 

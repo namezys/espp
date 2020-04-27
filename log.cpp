@@ -73,14 +73,6 @@ const Log& Log::operator<<(char obj) const
     return *this;
 }
 
-const Log& Log::operator<<(const char* obj) const
-{
-    for(;*obj != 0; ++obj) {
-        _OutChar(*obj);
-    }
-    _OutChar(' ');
-    return *this;
-}
 
 const Log& Log::operator<<(int obj) const
 {
@@ -100,6 +92,34 @@ const Log& Log::operator<<(const void* obj) const
     const auto value = reinterpret_cast<uintptr_t>(obj);
     _OutUInt(value);
     return *this;
+}
+
+namespace {
+
+const auto TRUE = "true";
+const auto FALSE = "false";
+
+}
+
+const espp::Log& Log::operator<<(const Buffer& buffer) const
+{
+    _OutBuffer(buffer.charData(), buffer.length());
+    _OutChar(' ');
+    return *this;
+}
+
+const Log& Log::operator<<(const char* obj) const
+{
+    for(;*obj != 0; ++obj) {
+        _OutChar(*obj);
+    }
+    _OutChar(' ');
+    return *this;
+}
+
+const espp::Log& Log::operator<<(bool is) const
+{
+    return *this << (is ? TRUE: FALSE);
 }
 
 }
