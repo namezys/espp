@@ -11,7 +11,7 @@ namespace espp {
  * The first available LTS is USER
  */
 enum class LTS{
-    TASK = 0,
+    TASK = 16,
     USER,
     USER_0 = USER,
     USER_1,
