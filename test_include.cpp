@@ -11,5 +11,8 @@
 #include "espp/wifi.h"
 #include "espp/mqtt.h"
 #include "espp/protobuf.h"
+#include "espp/buffer.h"
+#include "espp/web_server.h"
+#include "espp/web_server_html_template.h"
 
 #include "espp/utils/macros.h"
