@@ -57,7 +57,7 @@ public:
         return ESP_OK == esp_mqtt_client_publish(_client, topic, data, data_len, 0, retain ? 1 : 0);
     }
 
-    bool Publish(const StringBuffer& topic, const Buffer& data, bool retain = false)
+    bool Publish(const Data& topic, const Buffer& data, bool retain = false)
     {
         return Publish(topic.charData(), data.charData(), data.length(), retain);
     }
@@ -68,11 +68,7 @@ public:
         Publish(_status_topic, msg, true);
     }
 
-    void Subscribe(MqttSubscription& subscription, const std::string& topic)
-    {
-        assert(_subscriptions.count(topic) == 0);
-        _subscriptions[topic] = &subscription;
-    }
+    void Subscribe(MqttSubscription& subscription, const std::string& topic);
 
 protected:
     virtual void OnConnect(int session_present);
@@ -82,13 +78,14 @@ protected:
     virtual void OnEvent(const esp_mqtt_event_handle_t& event);
 
 private:
+    using SubList = std::vector<std::pair<std::string, MqttSubscription*>>;
     const std::string _url;
     const std::string _status_topic;
     const int _keep_alive_timeout = 15;
 
     Mutex _mutex;
     esp_mqtt_client_handle_t _client = nullptr;
-    std::map<std::string, MqttSubscription*> _subscriptions;
+    SubList _subscriptions;
     bool _is_connected = true;
 
     static

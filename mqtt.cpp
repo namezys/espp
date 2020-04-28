@@ -5,6 +5,7 @@
 #include "espp/utils/macros.h"
 
 #include <utility>
+#include <algorithm>
 
 namespace espp {
 
@@ -39,6 +40,7 @@ Mqtt::~Mqtt()
 
 void Mqtt::Init(const Buffer& status_msg)
 {
+    INFO << "Init MQTT connection to" << _url;
     esp_mqtt_client_config_t mqtt_cfg = {};
     mqtt_cfg.uri = _url.data();
     mqtt_cfg.event_handle = _EventHandler;
@@ -89,9 +91,10 @@ void Mqtt::OnDisconnect()
 void Mqtt::OnEvent(const esp_mqtt_event_handle_t& event)
 {
     Mutex::LockGuard lock(_mutex);
-    const std::string topic(event->topic, event->topic_len);
-    DEBUG << "Got message in topic" << topic;
-    const auto it = _subscriptions.find(topic);
+    const Buffer topic(event->topic, event->topic_len);
+    DEBUG << "Got message in topic" << topic << event->topic;
+    const auto it = std::find_if(_subscriptions.begin(), _subscriptions.end(),
+        [&topic](const SubList::value_type& o) { return topic == o.first;});
     if(it != _subscriptions.end()) {
         DEBUG << "Found subscription";
         it->second->OnEvent(event);
@@ -131,6 +134,7 @@ void Mqtt::_ProcessConnect(int)
 
     Mutex::LockGuard lock(_mutex);
     for(auto& subscription: _subscriptions) {
+        DEBUG << "Subscribe" << subscription.first;
         ESPP_CHECK(esp_mqtt_client_subscribe(_client, subscription.first.c_str(), 0) != -1);
     }
     _is_connected = true;
@@ -142,6 +146,14 @@ void Mqtt::_ProcessDisconnect()
     INFO << "Mqtt disconnected";
     Mutex::LockGuard lock(_mutex);
     _is_connected = false;
+}
+
+void Mqtt::Subscribe(MqttSubscription& subscription, const std::string& topic)
+{
+    assert(std::find_if(_subscriptions.begin(), _subscriptions.end(),
+        [&topic](const SubList::value_type& o) { return topic == o.first;}) == _subscriptions.end());
+    _subscriptions.push_back(std::make_pair(topic, &subscription));
+
 }
 
 }
