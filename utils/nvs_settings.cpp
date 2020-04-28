@@ -2,6 +2,7 @@
 
 #include <espp/log.h>
 #include <nvs_flash.h>
+#include <espp/utils/macros.h>
 
 namespace espp {
 
@@ -21,7 +22,6 @@ NvsSettings::NvsSettings()
     } else {
         INFO << "Storage was inited";
         _isStorageInited = true;
-        Load();
     }
 }
 
@@ -42,6 +42,16 @@ void NvsSettings::Save()
     }
     DoSave();
     ESP_ERROR_CHECK(nvs_commit(_nvs));
+}
+
+void NvsSettings::DoLoad()
+{
+    ESPP_CHECK(!"Can't be called and must be override");
+}
+
+void NvsSettings::DoSave()
+{
+    ESPP_CHECK(!"Can't be called and must be override");
 }
 
 

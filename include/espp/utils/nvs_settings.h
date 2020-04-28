@@ -4,6 +4,8 @@
 #include <nvs.h>
 #include <vector>
 
+#include <espp/log.h>
+
 namespace espp {
 
 class NvsSettings{
@@ -32,10 +34,9 @@ protected:
             return {};
         }
         ESP_ERROR_CHECK(getResult);
-        length += 1;
         std::vector<char> result(length);
         ESP_ERROR_CHECK(nvs_get_str(_nvs, name, result.data(), &length));
-        return {result.data(), result.data() + length};
+        return {result.data(), result.data() + length - 1};
     }
 
     void WriteStr(const char* name, const std::string& str, bool& changed)
