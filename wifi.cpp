@@ -1,271 +1,306 @@
-#include "espp/wifi.h"
-
-#include "espp/critical_section.h"
-#include "espp/log.h"
-#include "espp/utils/macros.h"
-
-#include <cstring>
+#include <espp/wifi.h>
 #include <esp_event_loop.h>
 
-namespace espp {
+namespace lamp {
 
-namespace {
-
-bool _SetWiFiSingleton(bool init)
+WiFi::WiFi()
 {
-    static bool is_inited = false;
-    if (init == is_inited) {
-        return false;
-    }
-    is_inited = init;
-    return true;
-}
-
-}
-
-WiFi::~WiFi()
-{
-    Mutex::LockGuard lock(_mutex);
-    if(isInited()) {
-        INFO << "DeInit WiFi";
-        ESP_ERROR_CHECK(esp_wifi_deinit());
-        ESPP_CHECK(_SetWiFiSingleton(false));
-        ESPP_CHECK(_EventHandler == esp_event_loop_set_cb(nullptr, nullptr));
-    }
-}
-
-void WiFi::Init()
-{
-    _Init();
-    OnReady();
-}
-
-void WiFi::_Init()
-{
-    INFO << "Init WiFi system";
-    Mutex::LockGuard lock(_mutex);
-    assert(!isInited());
-    ESPP_CHECK(_SetWiFiSingleton(true));
-    const auto init_loop_result = esp_event_loop_init(_EventHandler, this);
-    if(init_loop_result == ESP_FAIL) {
-        DEBUG << "Loop was inited early. Set event handler";
-        ESPP_CHECK(nullptr == esp_event_loop_set_cb(_EventHandler, this));
-    } else {
-        DEBUG << "Loop was inited";
-    }
-    DEBUG << "Init TCP/IP adapter";
+    DEBUG << "Init wifi";
     tcpip_adapter_init();
+    ESP_ERROR_CHECK(esp_event_loop_init(WiFi::StaticEventHandler, this));
 
-    DEBUG << "Init WiFi";
-    ESP_ERROR_CHECK(esp_wifi_init(&_config));
-    _is_inited = true;
-    DEBUG << "WiFi ready";
-}
+    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
 
-void WiFi::StartScan(const wifi_scan_config_t& config)
-{
-    INFO << "Start WiFi scan";
-    Mutex::LockGuard lock(_mutex);
-    ESPP_ASSERT(isInited());
-    ESPP_ASSERT(!isOccupied());
-
-    DEBUG << "Init WiFi station";
-    wifi_config_t station_config = {};
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
-    ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_STA, &station_config));
-    ESP_ERROR_CHECK(esp_wifi_start());
-
-    DEBUG << "Init scan";
-    ESP_ERROR_CHECK(esp_wifi_scan_start(&config, false));
-
-    _is_scan_done = false;
-    _is_scan = true;
-    DEBUG << "Scan started";
 }
 
-void WiFi::StartScan()
+Data WiFi::accessPointSsid() const
 {
-    wifi_scan_config_t config = {nullptr,nullptr,0,true,
-                                 WIFI_SCAN_TYPE_ACTIVE, {}};
-    config.scan_time.active.min = 500;
-    config.scan_time.active.max = 1000;
-    StartScan(config);
-}
-
-WiFi::ScanResult WiFi::scanResult()
-{
-    DEBUG << "Get scan result";
-    Mutex::LockGuard lock(_mutex);
-    if (!_is_scan) {
-        DEBUG << "No scan";
+    if(!_isAccessPoint) {
         return {};
     }
-    uint16_t count;
-    ESP_ERROR_CHECK(esp_wifi_scan_get_ap_num(&count));
-    _scan_result.resize(count);
-    ESP_ERROR_CHECK(esp_wifi_scan_get_ap_records(&count, _scan_result.data()));
-    return _scan_result;
+    wifi_config_t config;
+    ESP_ERROR_CHECK(esp_wifi_get_config(ESP_IF_WIFI_AP, &config));
+    return {config.ap.ssid, config.ap.ssid_len};
 }
 
-bool WiFi::StopScan()
+Data WiFi::stationSsid() const
 {
-    INFO << "Stop scan";
-    Mutex::LockGuard lock(_mutex);
+    if(!_isStation) {
+        return {};
+    }
+    wifi_config_t config;
+    ESP_ERROR_CHECK(esp_wifi_get_config(ESP_IF_WIFI_STA, &config));
+    return {config.sta.ssid};
+}
 
-    if(!_is_scan) {
-        DEBUG << "No scan";
+void WiFi::SetAccessPoint(const Buffer& ssid)
+{
+    INFO << "Set access point: SSID" << ssid;
+    Mutex::LockGuard lock(_mutex);
+    ESPP_CHECK(_state == State::none);
+    if(ssid.empty()) {
+        DEBUG << "Disable access point";
+        ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+
+        _isAccessPoint = false;
+    } else {
+        DEBUG << "Enable access point";
+        ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
+
+        wifi_config_t wifi_config;
+        wifi_config.ap.ssid_len = ssid.CopyTo(wifi_config.ap.ssid, 32, true);
+        wifi_config.ap.max_connection = 5;
+        wifi_config.ap.authmode = WIFI_AUTH_OPEN;
+
+        _isAccessPoint = true;
+        ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_AP, &wifi_config));
+    }
+}
+
+void WiFi::SetConnection(const Buffer& ssid, const Buffer& password)
+{
+    INFO << "Set connection to" << ssid << "with password length" << password.length();
+    Mutex::LockGuard lock(_mutex);
+    ESPP_CHECK(_state == State::none || _state == State::wait_start || _state == State::started);
+    if(ssid.empty()) {
+        DEBUG << "Disable station";
+        _isStation = false;
+    } else {
+        wifi_config_t config = {};
+        ssid.StringCopyTo(config.sta.ssid, 32);
+        password.StringCopyTo(config.sta.password, 64);
+        _isStation = true;
+
+        ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_STA, &config));
+    }
+}
+
+bool WiFi::Start()
+{
+    INFO << "Start WiFi";
+    Mutex::LockGuard lock(_mutex);
+    if(_state != State::none) {
+        DEBUG << "Invalid state";
         return false;
     }
-    ESP_ERROR_CHECK(esp_wifi_scan_stop());
-    ESP_ERROR_CHECK(esp_wifi_stop());
-    _scan_result.clear();
-    _is_scan = false;
-    DEBUG << "Scan stopped";
-    return true;
-}
 
-void WiFi::ConnectStation(const std::string &ssid, const std::string &password)
-{
-    INFO << "Connect to" << ssid << "using password with length" << password.size();
-    Mutex::LockGuard lock(_mutex);
-
-    ESPP_ASSERT(isInited());
-    ESPP_ASSERT(!isOccupied());
-
-    wifi_config_t config = {};
-    assert(ssid.length() < 32);
-    std::strncpy(reinterpret_cast<char*>(config.sta.ssid), ssid.data(), 32);
-    if(!password.empty()) {
-        assert(password.length() < 64);
-        std::strncpy(reinterpret_cast<char*>(config.sta.password), password.data(), 64);
-    }
-
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
-    ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_STA, &config));
+    _state = State::wait_start;
     ESP_ERROR_CHECK(esp_wifi_start());
-
-    _is_station_started = true;
-    DEBUG << "Station inited. Wait events: start, started";
+    return true;
 }
 
-bool WiFi::DisconnectStation()
+bool WiFi::Connect()
 {
-    INFO << "Disconnect";
+    INFO << "Connect WiFi station";
     Mutex::LockGuard lock(_mutex);
-    if( !_is_station_started) {
-        DEBUG << "No connection";
+    if(!_isStation) {
+        DEBUG << "Station isn't inited";
         return false;
     }
 
+    switch(_state) {
+        case State::wait_start:
+            DEBUG << "Wait start. Append wait connection";
+            _state = State::wait_start_connect;
+            break;
+        case State::started:
+            DEBUG << "Connect station";
+            _state = State::wait_connect;
+            ESP_ERROR_CHECK(esp_wifi_connect());
+            break;
+        default:
+            DEBUG << "Invalid state";
+            return false;
+    }
+
+    return true;
+}
+
+bool WiFi::Disconnect()
+{
+    INFO << "Disconnect WiFi station";
+    Mutex::LockGuard lock(_mutex);
+    if(!_isStation) {
+        DEBUG << "Station isn't inited";
+        return false;
+    }
+    switch(_state) {
+        case State::wait_start_connect:
+            DEBUG << "Wait start and connect. Reset wait connect";
+            _state = State::wait_start;
+            break;
+        case State::wait_connect:
+        case State::connected:
+            DEBUG << "Station connected. Disconnect";
+            ESP_ERROR_CHECK(esp_wifi_disconnect());
+            break;
+        default:
+            DEBUG << "Invalid state";
+            return false;
+    }
+    return true;
+}
+
+bool WiFi::Stop()
+{
+    INFO << "Stop wifi";
+    Mutex::LockGuard lock(_mutex);
+    if(_state == State::none) {
+        DEBUG << "Wifi wasn't started";
+        return false;
+    }
     ESP_ERROR_CHECK(esp_wifi_stop());
     return true;
 }
 
-void WiFi::OnReady()
+void WiFi::OnStarted()
 {
-}
-
-void WiFi::OnScanDone()
-{
-    StopScan();
+    INFO << "On started";
+    Mutex::LockGuard lock(_mutex);
+    switch(_state) {
+        case State::wait_start:
+            DEBUG << "WiFi started";
+            _state = State::started;
+            break;
+        case State::wait_start_connect:
+            DEBUG << "WiFi started and wait connection";
+            _state = State::wait_connect;
+            ESP_ERROR_CHECK(esp_wifi_connect());
+            break;
+        default:
+            DEBUG << "Invalid state";
+    }
 }
 
 void WiFi::OnConnected()
 {
+    INFO << "On connected";
+    Mutex::LockGuard lock(_mutex);
+    switch(_state) {
+        case State::wait_connect:
+            _state = State::connected;
+            break;
+        default:
+            ERROR << "Invalid state";
+    }
+}
+
+void WiFi::OnGotIp()
+{
+    INFO << "On got IP";
+    Mutex::LockGuard lock(_mutex);
+    switch(_state) {
+        case State::connected:
+            _hasIp = true;
+            break;
+        default:
+            ERROR << "Invalid state";
+    }
 }
 
 void WiFi::OnDisconnected()
 {
+    INFO << "On disconnected";
+    Mutex::LockGuard lock(_mutex);
+    switch(_state) {
+        case State::wait_connect:
+            DEBUG << "Wait connect reset";
+            _state = State::started;
+            break;
+        case State::connected:
+            DEBUG << "Reset connected state";
+            _state = State::started;
+            break;
+        default:
+            ERROR << "Invalid state";
+    }
+    _hasIp = false;
+}
+
+void WiFi::OnStop()
+{
+    INFO << "On stop";
+    Mutex::LockGuard lock(_mutex);
+    _state = State::none;
 }
 
 
-esp_err_t WiFi::_EventHandler(void* ctx, system_event_t* event)
+esp_err_t WiFi::StaticEventHandler(void* context, system_event_t* event)
 {
-    WiFi* impl = reinterpret_cast<WiFi*>(ctx);
-    impl->_ProcessEvent(*event);
+    WiFi* instance = reinterpret_cast<WiFi*>(context);
+    instance->HandleEvent(*event);
     return ESP_OK;
 }
 
-void WiFi::_ProcessEvent(system_event_t& event)
+void WiFi::HandleEvent(const system_event_t& event)
 {
-    switch(static_cast<int>(event.event_id)) {
-        case SYSTEM_EVENT_SCAN_DONE:
-            _is_scan_done = true;
-            OnScanDone();
-            break;
-
+    switch(event.event_id) {
         case SYSTEM_EVENT_STA_START:
-            _StationStarted();
-            break;
-        case SYSTEM_EVENT_STA_GOT_IP:
-            _StationConnected();
-            OnConnected();
-            break;
-        case SYSTEM_EVENT_STA_DISCONNECTED:
-            _StationDisconnected();
+            OnStarted();
             break;
         case SYSTEM_EVENT_STA_STOP:
-            _StationStopped();
+            OnStop();
+            break;
+        case SYSTEM_EVENT_STA_CONNECTED:
+            OnConnected();
+            break;
+        case SYSTEM_EVENT_STA_GOT_IP:
+            OnGotIp();
+            break;
+        case SYSTEM_EVENT_STA_DISCONNECTED:
             OnDisconnected();
             break;
+//        case SYSTEM_EVENT_AP_START:
+//            OnStarted();
+//            break;
+//        case SYSTEM_EVENT_AP_STOP:
+//            OnStop();
+//            break;
+        case SYSTEM_EVENT_AP_STACONNECTED:
+            OnStationConnected(event.event_info.sta_connected);
+            break;
+        case SYSTEM_EVENT_AP_STADISCONNECTED:
+            OnStationDisconnected(event.event_info.sta_disconnected);
+            break;
+        case SYSTEM_EVENT_AP_STAIPASSIGNED:
+            OnStationIpAssigned(event.event_info.ap_staipassigned);
+            break;
         default:
-            ;
+            DEBUG << "Unprocessed network event with id" << event.event_id;
     }
 }
 
-void WiFi::_StationStarted()
+void WiFi::OnStationConnected(const system_event_ap_staconnected_t&)
 {
+    DEBUG << "station connected to" << "access point";
     Mutex::LockGuard lock(_mutex);
-    DEBUG << "Station started";
-    ESPP_CHECK((_is_scan || _is_station_started) && !_is_station_connected);
-
-    if(_is_station_started) {
-        DEBUG << "Connect";
-        ESP_ERROR_CHECK(esp_wifi_connect());
-    } else {
-        DEBUG <<  "No station is inited";
+    if(!isStarted()) {
+        ERROR << "Unexpected event";
+        return;
     }
 }
 
-void WiFi::_StationConnected()
+void WiFi::OnStationDisconnected(const system_event_ap_stadisconnected_t&)
 {
+    DEBUG << "station disconnected from" << "access point";
     Mutex::LockGuard lock(_mutex);
-    DEBUG << "Station connected";
-    ESPP_CHECK(_is_station_started && !_is_station_connected);
-
-    if(_is_station_started) {
-        _is_station_connected = true;
-    } else {
-        DEBUG << "No station inited";
+    if(!isStarted()) {
+        ERROR << "Unexpected event";
+        return;
     }
 }
 
-void WiFi::_StationDisconnected()
+void WiFi::OnStationIpAssigned(const system_event_ap_staipassigned_t& event)
 {
+    DEBUG << "station got ip from" << "access point";
     Mutex::LockGuard lock(_mutex);
-    DEBUG << "Station disconnected";
-    ESPP_CHECK(_is_station_started);
-
-    if(_is_station_started) {
-        _is_station_connected = false;
-        esp_wifi_stop();
-    } else {
-        DEBUG << "No station inited";
+    if(!isStarted()) {
+        ERROR << "Unexpected event";
+        return;
     }
+    DEBUG << "Assign ip" << ip4addr_ntoa(&event.ip);
 }
-
-void WiFi::_StationStopped()
-{
-    Mutex::LockGuard lock(_mutex);
-    DEBUG << "Station stopped";
-    ESPP_CHECK(_is_station_started || _is_scan);
-
-    if (_is_station_started) {
-        _is_station_started = false;
-    } else {
-        DEBUG << "No station inited";
-    }
-}
-
 
 }

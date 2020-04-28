@@ -1,90 +1,129 @@
 #pragma once
 
-#include "freertos/FreeRTOS.h"
+#include <esp_wifi.h>
 
-#include "esp_wifi.h"
-#include "esp_event_loop.h"
+#include <espp/task.h>
+#include <espp/mutex.h>
+#include <espp/log.h>
+#include <espp/buffer.h>
 
-#include "espp/task.h"
-#include "espp/mutex.h"
+namespace lamp {
 
-#include <vector>
+using espp::Buffer;
+using espp::Data;
 
-namespace espp {
-
-class WiFi : protected TaskBase {
+/**
+ * Can handle event in his own thread
+ */
+class WiFi: espp::TaskBase{
 public:
-    using ScanResult = std::vector<wifi_ap_record_t>;
-    WiFi() = default;
-    virtual ~WiFi();
+    enum class State{
+        none,                // -> wait_start
+        started,             // -> wait_connect
+        connected,           // -> started
+        wait_start,          // -> started, wait_start_connect
+        wait_connect,        // -> connected
+        wait_start_connect,  // -> wait_connect, wait_start
+    };
 
-    void Init();
+    State _state = State::none;
+    bool _hasIp = false;
 
-    void StartScan(const wifi_scan_config_t& config);
-    void StartScan();
-    ScanResult scanResult();
-    bool StopScan();
+    WiFi();
 
-    bool isScan() const
+    WiFi(const WiFi&) = delete;
+
+    WiFi(WiFi&&) = delete;
+
+    bool isAccessPoint() const
     {
-        return _is_scan;
+        return _isAccessPoint;
     }
 
-    bool isScanDone() const
+    bool isStation() const
     {
-        return _is_scan_done;
+        return _isStation;
     }
 
-    void ConnectStation(const std::string& ssid, const std::string& password);
-    bool DisconnectStation();
-
-    bool isStationStarted() const
+    bool isStarted() const
     {
-        return _is_station_started;
+        return _state != State::none && _state != State::wait_start && _state != State::wait_start_connect;
     }
 
     bool isStationConnected() const
     {
-        return _is_station_connected;
+        return _state == State::connected;
     }
 
-protected:
-    using Mutex = espp::Mutex<>;
-    Mutex _mutex;
-    wifi_init_config_t _config = WIFI_INIT_CONFIG_DEFAULT();
-    std::vector<wifi_ap_record_t> _scan_result;
-
-    bool isInited()
+    bool isStationConnecting() const
     {
-        return _is_inited;
+        return _state == State::wait_connect || _state == State::wait_start_connect;
     }
 
-    bool isOccupied() const
+    bool hasStationIp() const
     {
-        return _is_scan || _is_station_started;
+        return _hasIp;
     }
 
-    virtual void OnReady();
-    virtual void OnScanDone();
-    virtual void OnConnected();
-    virtual void OnDisconnected();
+    Data accessPointSsid() const;
+
+    Data stationSsid() const;
+
+    void SetAccessPoint(const Buffer& ssid);
+
+    void SetConnection(const Buffer& ssid, const Buffer& password);
+
+    bool Start();
+
+    bool Connect();
+
+    bool Disconnect();
+
+    bool Stop();
+
 
 private:
-    bool _is_inited = false;
-    bool _is_scan = false;
-    bool _is_scan_done = false;
-    bool _is_station_started = false;
-    bool _is_station_connected = false;
+    using Mutex = espp::Mutex<pdMS_TO_TICKS(100)>;
+    mutable Mutex _mutex;
+    bool _isScan = false;
+    bool _isStation = false;
+    bool _isAccessPoint = false;
 
-    void _Init();
+    static
+    esp_err_t StaticEventHandler(void* context, system_event_t* event);
 
-    static esp_err_t _EventHandler(void* ctx, system_event_t *event);
-    void _ProcessEvent(system_event_t& event);
+    void HandleEvent(const system_event_t& event);
 
-    void _StationStarted();
-    void _StationConnected();
-    void _StationDisconnected();
-    void _StationStopped();
+    void OnStarted();
+
+    void OnConnected();
+
+    void OnGotIp();
+
+    void OnDisconnected();
+
+    void OnStop();
+
+    void OnStationConnected(const system_event_ap_staconnected_t&);
+
+    void OnStationDisconnected(const system_event_ap_stadisconnected_t&);
+
+    void OnStationIpAssigned(const system_event_ap_staipassigned_t&);
 };
+
+inline
+const espp::Log& operator<<(const espp::Log& log, const WiFi& wifi)
+{
+    log << "WiFi started:" << wifi.isStarted() << "\n"
+        << "\tstation" << "\n"
+        << "\t\tactive:" << wifi.isStation() << "\n"
+        << "\t\tconnected:" << wifi.isStationConnected() << "\n"
+        << "\t\tSSID:" << wifi.stationSsid() << "\n"
+        << "\taccess point" << "\n"
+        << "\t\tactive:" << wifi.isAccessPoint() << "\n"
+        << "\t\tSSID:" << wifi.accessPointSsid();
+    return log;
+}
+
 
 }
