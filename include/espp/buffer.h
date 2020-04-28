@@ -15,19 +15,22 @@ namespace espp {
 class Buffer{
 public:
     template<class T>
-    Buffer(T* data, std::size_t length)
+    Buffer(T* data, std::size_t length):
+        _data(reinterpret_cast<const uint8_t*>(data)),
+        _length(sizeof(T) * length)
     {
-        Set(data, length);
+        assert(_length >= 0 && _data != nullptr);
     }
 
-    Buffer(const char* c_str)
+    /** Expect zero terminated string */
+    Buffer(const char* c_str):
+        Buffer(c_str, std::strlen(c_str))
     {
-        Set(c_str, std::strlen(c_str));
     }
 
-    Buffer(const std::string& str, bool with_zero_terminal = false)
+    Buffer(const std::string& str):
+        Buffer(str.c_str(), str.size())
     {
-        Set(str.c_str(), str.size() + (with_zero_terminal ? 1 : 0));
     }
 
     Buffer(const Buffer&) = delete;
@@ -74,9 +77,9 @@ public:
         return {charData(), length()};
     }
 
-    operator std::string() const
+    bool operator==(const Buffer& o) const
     {
-        return str();
+        return length() == o.length() && std::strncmp(charData(), o.charData(), std::min(length(), o.length())) == 0;
     }
 
 protected:
@@ -95,6 +98,29 @@ private:
     std::size_t _length = 0;
 };
 
+/**
+ * Contains zero-terminated string. Length include zero terminate
+ *
+ */
+class StringBuffer: public Buffer {
+public:
+    StringBuffer(const std::string& str):
+        Buffer(str.c_str(), str.size() + 1)
+    {}
+
+    StringBuffer(const char* str):
+        Buffer(str, std::strlen(str) + 1)
+    {}
+
+    Buffer buffer() const
+    {
+        return {data(), length() - 1};
+    }
+
+protected:
+    StringBuffer() = delete;
+};
+
 inline
 std::ostream& operator<<(std::ostream& s, const Buffer& buffer)
 {
@@ -107,41 +133,41 @@ std::ostream& operator<<(std::ostream& s, const Buffer& buffer)
 /**
  * Own string and store buffer
  */
-class StringBuffer: public Buffer{
+class Data: public Buffer {
 public:
-    StringBuffer() = default;
+    Data() = default;
 
-    StringBuffer(std::string str):
+    Data(std::string str):
         _str(std::move(str))
     {
         Set(_str.c_str(), _str.length());
     }
 
-    StringBuffer(const uint8_t* data, std::size_t length):
+    Data(const uint8_t* data, std::size_t length):
         _str(reinterpret_cast<const char*>(data), length)
     {
         Set(_str.c_str(), _str.length());
     }
 
-    StringBuffer(const char* data):
+    Data(const char* data):
         _str(data)
     {
         Set(_str.c_str(), _str.length());
     }
 
 
-    StringBuffer(const uint8_t* data):
-        StringBuffer(reinterpret_cast<const char*>(data))
+    Data(const uint8_t* data):
+        Data(reinterpret_cast<const char*>(data))
     {
     }
 
-    StringBuffer(const StringBuffer& other):
-        StringBuffer(other._str)
+    Data(const Data& other):
+        Data(other._str)
     {
     }
 
-    StringBuffer(StringBuffer&& other) noexcept:
-        StringBuffer(other._str)
+    Data(Data&& other) noexcept:
+        Data(other._str)
     {
     }
 
